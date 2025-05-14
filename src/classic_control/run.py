@@ -2,6 +2,7 @@ import gymnasium as gym
 import numpy as np
 import matplotlib.pyplot as plot
 import pickle as file_manager
+import math
 
 
 def run(episodes=15000, is_training=True, render=False):
@@ -12,7 +13,7 @@ def run(episodes=15000, is_training=True, render=False):
     # We need to break down our continious observation space into discrete bins
     # The following array defines the number of bins for each observation:
     # [cart_position, cart_velocity, pole_angle, pole_velocity]
-    number_of_bins = [12, 12, 64, 64]
+    number_of_bins = [12, 12, 48, 48]
 
     # Create a list of bin edges for each observation
     bins = [
@@ -32,28 +33,32 @@ def run(episodes=15000, is_training=True, render=False):
             for i in range(len(observation))
         )
 
-    q_array = None
-    if (is_training == True):
+    # q_array = None
+    # if (is_training == True):
 
-        # Initialize a blank Q-table with zeros if training
-        q_array = np.zeros(number_of_bins + [env.action_space.n])
+    #     # Initialize a blank Q-table with zeros if training
+    #     q_array = np.zeros(number_of_bins + [env.action_space.n])
 
-    else:
-        # Code for loading a previously trained Q-table from file if not training
-        with open("./agents/q_array.pkl", "rb") as file:
-            q_array_from_file = file_manager.load(file)
-        q_array = q_array_from_file
+    # else:
+    #     # Code for loading a previously trained Q-table from file if not training
+    #     with open("./agents/q_array.pkl", "rb") as file:
+    #         q_array_from_file = file_manager.load(file)
+    #     q_array = q_array_from_file
+
+    with open("./agents/q_array317.pkl", "rb") as file:
+        q_array_from_file = file_manager.load(file)
+    q_array = q_array_from_file
 
     # Initialize the Q-learning parameters
     learning_rate = 0.4
     discount_factor = 0.9
-    epsilon = 1  # 1 = 100% random actions
+    epsilon = .9  # 1 = 100% random actions
     minimum_epsilon = 0.1  # Minimum epsilon value
     # Decay rate per episode at which actions become less random and start following the policy
-    epsilon_decay_rate = 0.00009
-    # Ideal seed for training/reproducibility. May need to set episodes closer to 100,000 and decrease episolon_decay_rate for random environments.
-    random_number_generator = np.random.default_rng(42)
+    epsilon_decay_rate = 0.0001
+    random_number_generator = np.random.default_rng()
 
+    lowest_reward_to_save = 309
     rewards_per_episode = np.zeros(episodes)
 
     for episode_number in range(episodes):
@@ -80,8 +85,16 @@ def run(episodes=15000, is_training=True, render=False):
                 # Convert the new continuous observation to discrete bins
                 discrete_new_state = continuous_observation_to_discrete(
                     new_state, bins)
+                
+                # Positive encouragement
+                cart_position = state[0]
+                center_bonus = max(0, 1 - abs(cart_position) / 2.4)
+                adjusted_reward = reward + 0.1 * center_bonus
+
+
+                # Update the Q-value using the Q-learning formula
                 q_array[discrete_state][action] = q_array[discrete_state][action] + learning_rate * (
-                    reward + discount_factor * np.max(q_array[discrete_new_state]) - q_array[discrete_state][action])
+                    adjusted_reward + discount_factor * np.max(q_array[discrete_new_state]) - q_array[discrete_state][action])
 
             state = new_state
 
@@ -99,9 +112,13 @@ def run(episodes=15000, is_training=True, render=False):
             print(
                 f"Episode {episode_number}: Avg Reward (last 100): {avg_last_100:.2f}, Epsilon: {epsilon:.4f}")
             
-            if avg_last_100 >= 250:
-                with open(f"./agents/q_array{avg_last_100}.pkl", "wb") as file:
+            if avg_last_100 > lowest_reward_to_save:
+
+                print(f"Saving Q-table with avg reward {avg_last_100:.2f}")
+                # Save the Q-table to a file
+                with open(f"./agents/q_array{math.floor(avg_last_100)}.pkl", "wb") as file:
                     file_manager.dump(q_array, file)
+                lowest_reward_to_save = avg_last_100
 
     env.close()
 
@@ -126,4 +143,4 @@ def run(episodes=15000, is_training=True, render=False):
 
 if __name__ == "__main__":
     run(episodes=25000, is_training=True, render=False)
-    # run(episodes=1, is_training=False, render=True)
+    # run(episodes=5, is_training=False, render=True)
